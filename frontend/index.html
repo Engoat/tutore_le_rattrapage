@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Rattrapo - Espace Parents</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e8ba3 100%); min-height: 100vh; color: #2c3e50; }
+        .navbar { background: rgba(255, 255, 255, 0.95); padding: 16px 0; box-shadow: 0 2px 20px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100; }
+        .navbar-content { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand-logo { width: 50px; height: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: white; }
+        .brand-text h1 { font-size: 22px; font-weight: 700; color: #667eea; }
+        .brand-text p { font-size: 12px; color: #64748b; }
+        .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .card { background: white; border-radius: 20px; padding: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); max-width: 450px; margin: 60px auto; }
+        .card-header { text-align: center; margin-bottom: 32px; }
+        .card-title { font-size: 28px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+        .card-subtitle { font-size: 15px; color: #64748b; }
+        .form-group { margin-bottom: 24px; }
+        label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #334155; }
+        input { width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 16px; }
+        input:focus { outline: none; border-color: #667eea; }
+        button { width: 100%; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        button:hover { transform: translateY(-2px); }
+        .alert { padding: 14px 18px; border-radius: 12px; margin-bottom: 24px; font-size: 14px; }
+        .alert.success { background: #d1fae5; color: #065f46; }
+        .alert.error { background: #fee2e2; color: #991b1b; }
+        .students-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
+        .student-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .student-name { font-size: 20px; font-weight: 700; color: #1e293b; margin-bottom: 16px; }
+        .detail-item { padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+        .action-btn { padding: 12px; font-size: 14px; border-radius: 10px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="brand">
+                <div class="brand-logo">CR</div>
+                <div class="brand-text">
+                    <h1>College Rattrapo</h1>
+                    <p>Espace Parents</p>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="page-login" class="page active">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Connexion</h2>
+                    <p class="card-subtitle">Entrez votre numero pour recevoir un code</p>
+                </div>
+                <div id="message-login"></div>
+                <div class="form-group">
+                    <label for="telephone">Numero de telephone</label>
+                    <input type="tel" id="telephone" placeholder="Ex: 693147445" />
+                </div>
+                <button onclick="envoyerOtp()">Recevoir le code</button>
+            </div>
+        </div>
+
+        <div id="page-otp" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Verification</h2>
+                    <p class="card-subtitle">Code envoye par SMS</p>
+                </div>
+                <div id="message-otp"></div>
+                <div class="form-group">
+                    <label for="code-otp">Code de verification</label>
+                    <input type="text" id="code-otp" placeholder="000000" maxlength="6" />
+                </div>
+                <button onclick="verifierOtp()">Verifier</button>
+            </div>
+        </div>
+
+        <div id="page-dashboard" class="page">
+            <div id="liste-enfants"></div>
+            <button onclick="deconnexion()" style="margin-top: 32px;">Se deconnecter</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080/api';
+        let numeroTelephone = '';
+        let token = '';
+
+        function afficherPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+        }
+
+        function afficherMessage(containerId, message, type) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="alert ${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        async function envoyerOtp() {
+            const tel = document.getElementById('telephone').value.trim();
+            if (!tel) {
+                afficherMessage('message-login', 'Veuillez entrer un numero', 'error');
+                return;
+            }
+            numeroTelephone = tel;
+            try {
+                const response = await fetch(`${API_URL}/auth/envoyer-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numeroTelephone: tel })
+                });
+                const data = await response.json();
+                if (data.otpEnvoye) {
+                    afficherMessage('message-otp', 'Code envoye avec succes', 'success');
+                    afficherPage('page-otp');
+                } else {
+                    afficherMessage('message-login', 'Aucun compte trouve', 'error');
+                }
+            } catch (error) {
+                afficherMessage('message-login', 'Erreur de connexion', 'error');
+            }
+        }
+
+        async function verifierOtp() {
+            const code = document.getElementById('code-otp').value.trim();
+            if (!code || code.length !== 6) {
+                afficherMessage('message-otp', 'Code invalide', 'error');
+                return;
+            }
+            try {
+                const response = await fetch(`${API_URL}/auth/verifier-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numeroTelephone: numeroTelephone, codeOtp: code })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    token = data.token;
+                    chargerEnfants();
+                } else {
+                    afficherMessage('message-otp', 'Code incorrect', 'error');
+                }
+            } catch (error) {
+                afficherMessage('message-otp', 'Erreur de connexion', 'error');
+            }
+        }
+
+        async function chargerEnfants() {
+            afficherPage('page-dashboard');
+            document.getElementById('liste-enfants').innerHTML = '<p>Chargement...</p>';
+            try {
+                const response = await fetch(`${API_URL}/etudiants/mes-enfants`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const enfants = await response.json();
+                let html = '<div class="students-grid">';
+                enfants.forEach(enfant => {
+                    html += `
+                        <div class="student-card">
+                            <div class="student-name">${enfant.prenom} ${enfant.nom}</div>
+                            <div class="detail-item">Classe: ${enfant.classe.libelle}</div>
+                            <div class="detail-item">Filiere: ${enfant.classe.filiere}</div>
+                            <button class="action-btn" onclick="voirNotes('${enfant.matricule}')">Notes</button>
+                            <button class="action-btn" onclick="voirEmploi('${enfant.matricule}')">Emploi</button>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                document.getElementById('liste-enfants').innerHTML = html;
+            } catch (error) {
+                document.getElementById('liste-enfants').innerHTML = '<p>Erreur de chargement</p>';
+            }
+        }
+
+        function voirNotes(matricule) {
+            window.open(`notes.html?matricule=${matricule}&token=${token}`, '_blank');
+        }
+
+        function voirEmploi(matricule) {
+            window.open(`emploi.html?matricule=${matricule}&token=${token}`, '_blank');
+        }
+
+        function deconnexion() {
+            token = '';
+            numeroTelephone = '';
+            document.getElementById('telephone').value = '';
+            document.getElementById('code-otp').value = '';
+            afficherPage('page-login');
+        }
+    </script>
+</body>
+</html>

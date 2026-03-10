@@ -1,0 +1,394 @@
+# Implementation Plan - Plateforme de Suivi Académique
+
+## Task List
+
+- [ ] 1. Setup project infrastructure and development environment
+  - Create Angular 20+ project with routing, modules, and Angular Material
+  - Create Spring Boot 3.x project with required dependencies (Spring Security, Spring Data JPA, JasperReports, JWT)
+  - Configure PostgreSQL database connection and create database schema
+  - Setup Flyway migrations for database versioning
+  - Configure CORS between Angular frontend and Spring Boot backend
+  - Create environment configuration files for development and production
+  - _Requirements: 6.1, 6.2, 6.3, 6.6_
+
+- [ ] 2. Implement database schema and JPA entities
+  - [ ] 2.1 Create database tables using Flyway migration scripts
+    - Write migration script for Student, Classe, Inscription, Note, EmploiDuTemps, OtpStore tables
+    - Add indexes on foreign keys and frequently queried columns (phone numbers, matricule)
+    - Insert sample test data for development (students, classes, grades, schedules)
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
+  - [ ] 2.2 Create JPA entity classes with proper annotations
+    - Implement Student, Classe, Inscription, Note, EmploiDuTemps, OtpStore entities
+    - Define relationships (@ManyToOne, @OneToMany, @OneToOne) between entities
+    - Add validation annotations (@NotNull, @Size, @Pattern) on entity fields
+    - Create TypeEvaluation enum (CC, SN, TP, RAT)
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
+  - [ ] 2.3 Create Spring Data JPA repositories
+    - Implement StudentRepository with custom query methods (findByTelephonePereContainingOrTelephoneMereContaining)
+    - Implement ClasseRepository, InscriptionRepository, NoteRepository, EmploiDuTempsRepository
+    - Implement OtpStoreRepository with methods for OTP validation and cleanup
+    - _Requirements: 5.7, 1.2, 1.3_
+
+- [ ] 3. Implement phone number normalization service
+  - [ ] 3.1 Create PhoneNumberNormalizationService with normalization logic
+    - Implement normalizeAndSplit() method to handle slash-separated phone numbers
+    - Implement normalize() method to remove spaces, parentheses, country codes
+    - Implement matches() method to compare input phone with stored phones
+    - Handle numeric, alphabetic, and alphanumeric phone number formats
+    - _Requirements: 5.2, 5.3, 1.1, 1.6, 1.7, 8.2, 8.4, 8.5_
+  - [ ]* 3.2 Write unit tests for phone normalization
+    - Test normalization of various formats (with/without country code, with spaces/parentheses)
+    - Test splitting of multivalued phone numbers
+    - Test matching logic with different input formats
+    - _Requirements: 5.2, 5.3, 8.2, 8.4_
+
+- [ ] 4. Implement OTP generation and SMS service
+  - [ ] 4.1 Create OtpService for OTP generation and validation
+    - Implement generateOtp() method to create 6-digit random code
+    - Implement storeOtp() method to save OTP with 15-minute expiration
+    - Implement validateOtp() method to check code validity and expiration
+    - Implement invalidateOtp() method to remove used OTP codes
+    - Add scheduled task to cleanup expired OTP entries
+    - _Requirements: 1.2, 1.3, 1.4_
+  - [ ] 4.2 Create SmsService with mock implementation for development
+    - Implement sendSms() method that logs to console in development mode
+    - Add configuration for SMS provider (Twilio/BulkSMS) with API credentials
+    - Implement SMS message template for OTP code
+    - Add error handling for SMS sending failures
+    - _Requirements: 1.1, 6.4_
+  - [ ]* 4.3 Write unit tests for OTP service
+    - Test OTP generation (6 digits, uniqueness)
+    - Test OTP validation (valid, invalid, expired)
+    - Test OTP expiration after 15 minutes
+    - _Requirements: 1.2, 1.3, 1.4_
+
+- [ ] 5. Implement JWT token generation and validation
+  - [ ] 5.1 Create JwtService for token operations
+    - Implement generateToken() method with phone number as subject
+    - Implement validateToken() method to verify signature and expiration
+    - Implement extractPhoneNumber() method to get phone from token
+    - Configure JWT secret key and expiration time (30 minutes)
+    - _Requirements: 1.5, 7.1, 7.2_
+  - [ ] 5.2 Configure Spring Security with JWT authentication
+    - Create JwtAuthenticationFilter to validate tokens on each request
+    - Configure SecurityFilterChain with public endpoints (/api/auth/**) and protected endpoints
+    - Implement custom AuthenticationEntryPoint for 401 errors
+    - Add CORS configuration for Angular frontend origin
+    - _Requirements: 7.1, 7.4, 6.3_
+  - [ ]* 5.3 Write unit tests for JWT service
+    - Test token generation with valid phone number
+    - Test token validation (valid, expired, invalid signature)
+    - Test phone number extraction from token
+    - _Requirements: 1.5, 7.1_
+
+- [ ] 6. Implement authentication REST API endpoints
+  - [ ] 6.1 Create AuthenticationService with business logic
+    - Implement sendOtp() method: normalize phone, generate OTP, store OTP, send SMS
+    - Implement verifyOtp() method: validate OTP, generate JWT token, invalidate OTP
+    - Implement phone number validation logic
+    - Add rate limiting to prevent OTP spam (max 3 requests per phone per hour)
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+  - [ ] 6.2 Create AuthController with REST endpoints
+    - Implement POST /api/auth/send-otp endpoint with request/response DTOs
+    - Implement POST /api/auth/verify-otp endpoint with JWT token response
+    - Add request validation (@Valid) and error handling
+    - Return appropriate HTTP status codes (200, 400, 401, 503)
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+  - [ ] 6.3 Create global exception handler for error responses
+    - Implement @RestControllerAdvice with exception handlers
+    - Handle OtpExpiredException, InvalidOtpException, SmsServiceException
+    - Return standardized ErrorResponse DTO with code, message, timestamp
+    - _Requirements: 1.4_
+  - [ ]* 6.4 Write integration tests for authentication endpoints
+    - Test send-otp endpoint with valid and invalid phone numbers
+    - Test verify-otp endpoint with valid, invalid, and expired OTP codes
+    - Test JWT token generation and validation flow
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+
+- [ ] 7. Implement student data retrieval service and API
+  - [ ] 7.1 Create StudentService with authorization logic
+    - Implement findStudentsByParentPhone() method using phone normalization
+    - Implement isAuthorizedToViewStudent() method to check phone number match
+    - Query students where father's or mother's phone matches authenticated phone
+    - Return Student entities with Classe information
+    - _Requirements: 2.1, 2.6, 7.3, 8.1, 8.3, 8.5_
+  - [ ] 7.2 Create StudentController with REST endpoint
+    - Implement GET /api/students/my-children endpoint
+    - Extract phone number from JWT token in SecurityContext
+    - Map Student entities to StudentDTO with nested ClasseDTO
+    - Add @PreAuthorize annotation for authentication requirement
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+  - [ ]* 7.3 Write unit tests for student service
+    - Test findStudentsByParentPhone with single and multiple children
+    - Test authorization logic with matching and non-matching phone numbers
+    - Test phone normalization integration
+    - _Requirements: 2.1, 2.6, 7.3, 8.1, 8.3_
+
+- [ ] 8. Implement grade report PDF generation with JasperReports
+  - [ ] 8.1 Design JasperReports template for grade reports
+    - Create grade_report.jrxml template with header, student info, grades table, footer
+    - Define template parameters (matricule, student name, class)
+    - Design grades table with columns: Matière, Code UE, Type Évaluation, Note, Semestre
+    - Add grouping by semester and sub-totals
+    - Include Institut Saint Jean logo and branding
+    - _Requirements: 3.2, 3.3, 6.5_
+  - [ ] 8.2 Create GradeService to retrieve student grades
+    - Implement findGradesByStudent() method to fetch all grades with inscriptions
+    - Join Note, Inscription, Student entities to get complete grade data
+    - Order grades by semester and subject name
+    - _Requirements: 3.1, 3.2, 5.5, 5.6_
+  - [ ] 8.3 Create PdfGenerationService with JasperReports integration
+    - Implement generateGradeReport() method using JasperReports API
+    - Load and compile .jrxml template
+    - Create JRBeanCollectionDataSource from grade data
+    - Export report to PDF byte array
+    - Add error handling for template loading and PDF generation failures
+    - _Requirements: 3.3, 3.5, 6.5_
+  - [ ] 8.4 Create GradeController with PDF download endpoint
+    - Implement GET /api/grades/{matricule}/report endpoint
+    - Verify authorization: check if authenticated phone matches student's parent phone
+    - Set Content-Type: application/pdf and Content-Disposition headers
+    - Return PDF as byte array with appropriate filename
+    - Handle StudentNotFoundException and UnauthorizedAccessException
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 7.3_
+  - [ ]* 8.5 Write integration tests for PDF generation
+    - Test grade report generation with sample student data
+    - Test authorization (parent can only access their children's reports)
+    - Test error handling (student not found, no grades available)
+    - _Requirements: 3.1, 3.3, 3.5, 7.3_
+
+- [ ] 9. Implement schedule PDF retrieval service and API
+  - [ ] 9.1 Create ScheduleService to retrieve class schedules
+    - Implement getSchedulePdf() method to find EmploiDuTemps by class ID
+    - Read PDF file from file system using stored URL/path
+    - Return PDF as byte array
+    - Handle file not found errors
+    - _Requirements: 4.1, 4.2, 4.5, 4.6_
+  - [ ] 9.2 Create ScheduleController with PDF download endpoint
+    - Implement GET /api/schedules/class/{classeId} endpoint
+    - Verify authorization: check if authenticated phone has a child in the class
+    - Set Content-Type: application/pdf and Content-Disposition headers
+    - Return PDF byte array with appropriate filename
+    - Handle ScheduleNotFoundException
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+  - [ ] 9.3 Create file storage directory and upload sample schedule PDFs
+    - Create /var/data/schedules directory (or configurable path)
+    - Upload sample schedule PDFs for test classes
+    - Update EmploiDuTemps table with PDF file paths
+    - _Requirements: 4.2, 4.6_
+  - [ ]* 9.4 Write integration tests for schedule retrieval
+    - Test schedule PDF download with valid class ID
+    - Test authorization (parent can only access their children's class schedules)
+    - Test error handling (schedule not found, file not accessible)
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+
+- [ ] 10. Implement Angular authentication module
+  - [ ] 10.1 Create AuthService with HTTP client methods
+    - Implement sendOtp(phoneNumber) method calling POST /api/auth/send-otp
+    - Implement verifyOtp(phoneNumber, otp) method calling POST /api/auth/verify-otp
+    - Implement logout() method to clear token from localStorage
+    - Implement isAuthenticated() method to check token validity
+    - Implement getToken() method to retrieve stored JWT token
+    - Add token storage in localStorage
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+  - [ ] 10.2 Create LoginComponent for phone number input
+    - Create form with phone number input field and validation
+    - Implement "Envoyer le code" button to call AuthService.sendOtp()
+    - Display success message when OTP is sent
+    - Display error messages for invalid phone or SMS service errors
+    - Navigate to OTP verification page on success
+    - _Requirements: 1.1_
+  - [ ] 10.3 Create OtpVerificationComponent for OTP code input
+    - Create form with 6-digit OTP code input field
+    - Implement countdown timer showing remaining time (15 minutes)
+    - Implement "Vérifier" button to call AuthService.verifyOtp()
+    - Implement "Renvoyer le code" button to request new OTP
+    - Display error messages for invalid or expired OTP
+    - Navigate to student dashboard on successful verification
+    - _Requirements: 1.2, 1.3, 1.4, 1.5_
+  - [ ] 10.4 Create AuthGuard to protect routes
+    - Implement CanActivate interface to check authentication status
+    - Redirect to login page if user is not authenticated
+    - Allow access to protected routes if valid token exists
+    - _Requirements: 2.4, 2.5, 7.1_
+  - [ ] 10.5 Create AuthInterceptor to add JWT token to requests
+    - Implement HttpInterceptor to add Authorization header with Bearer token
+    - Handle 401 errors by clearing token and redirecting to login
+    - _Requirements: 1.5, 7.1, 7.2_
+  - [ ]* 10.6 Write unit tests for authentication components and services
+    - Test AuthService methods with mocked HTTP client
+    - Test LoginComponent form validation and OTP sending
+    - Test OtpVerificationComponent timer and verification logic
+    - Test AuthGuard route protection
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+
+- [ ] 11. Implement Angular student dashboard module
+  - [ ] 11.1 Create StudentService with HTTP client methods
+    - Implement getMyChildren() method calling GET /api/students/my-children
+    - Map API response to Student interface with nested Classe interface
+    - Add error handling for network and authorization errors
+    - _Requirements: 2.1, 2.2_
+  - [ ] 11.2 Create StudentListComponent to display children
+    - Create component to fetch and display list of students on init
+    - Display student cards with nom, prénom, classe (libellé, filière, niveau)
+    - Add "Notes" button for each student to download grade report
+    - Add "Emploi du temps" button for each student to download schedule
+    - Display loading spinner while fetching data
+    - Display error message if no children found or API error
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+  - [ ] 11.3 Implement grade report download functionality
+    - Create GradeService with downloadGradeReport(matricule) method
+    - Call GET /api/grades/{matricule}/report endpoint
+    - Handle PDF blob response and trigger browser download
+    - Display success/error toast notifications
+    - _Requirements: 3.1, 3.4_
+  - [ ] 11.4 Implement schedule download functionality
+    - Create ScheduleService with downloadSchedule(classeId) method
+    - Call GET /api/schedules/class/{classeId} endpoint
+    - Handle PDF blob response and trigger browser download
+    - Display success/error toast notifications
+    - _Requirements: 4.1, 4.3_
+  - [ ] 11.5 Add session timeout handling
+    - Implement idle timer to track user inactivity
+    - Display warning modal before session expires (30 minutes)
+    - Redirect to login page when session expires
+    - Clear token and user data on timeout
+    - _Requirements: 2.4, 2.5, 7.2_
+  - [ ]* 11.6 Write unit tests for student dashboard components
+    - Test StudentListComponent with mocked StudentService
+    - Test grade report download with mocked GradeService
+    - Test schedule download with mocked ScheduleService
+    - Test session timeout logic
+    - _Requirements: 2.1, 2.2, 2.3, 3.1, 3.4, 4.1, 4.3_
+
+- [ ] 12. Implement Angular routing and navigation
+  - [ ] 12.1 Configure Angular routes with lazy loading
+    - Create route for login page (public)
+    - Create route for OTP verification page (public)
+    - Create route for student dashboard (protected with AuthGuard)
+    - Configure lazy loading for feature modules
+    - Set default redirect to login page
+    - _Requirements: 1.1, 1.3, 2.1_
+  - [ ] 12.2 Create navigation header component
+    - Display Institut Saint Jean logo and application title
+    - Show logout button when user is authenticated
+    - Implement logout functionality to clear token and redirect to login
+    - _Requirements: 1.5_
+
+- [ ] 13. Implement error handling and user feedback
+  - [ ] 13.1 Create global error handler service
+    - Implement ErrorHandler to catch and log frontend errors
+    - Display user-friendly error messages in toast notifications
+    - Handle network errors, API errors, and unexpected errors
+    - _Requirements: 1.4, 2.5, 3.5, 4.4, 4.5_
+  - [ ] 13.2 Create toast notification service
+    - Implement service to display success, error, warning, info messages
+    - Use Angular Material Snackbar or similar component
+    - Configure auto-dismiss timeout and positioning
+    - _Requirements: 1.4, 3.4, 4.3_
+  - [ ] 13.3 Add loading indicators
+    - Create loading spinner component
+    - Display spinner during API calls (OTP sending, data fetching, PDF generation)
+    - Disable buttons during loading to prevent duplicate requests
+    - _Requirements: 1.1, 2.1, 3.5, 4.4_
+
+- [ ] 14. Implement security measures and validation
+  - [ ] 14.1 Add input validation on backend
+    - Validate phone number format in AuthController
+    - Validate OTP code format (6 digits)
+    - Validate matricule format in GradeController and ScheduleController
+    - Add @Valid annotations and custom validators
+    - _Requirements: 7.7, 1.1, 1.3_
+  - [ ] 14.2 Add input validation on frontend
+    - Validate phone number format in LoginComponent (Cameroonian format)
+    - Validate OTP code format (6 digits) in OtpVerificationComponent
+    - Display inline validation error messages
+    - Disable submit buttons until form is valid
+    - _Requirements: 7.7, 1.1, 1.3_
+  - [ ] 14.3 Implement rate limiting for OTP requests
+    - Add rate limiting logic in AuthenticationService (max 3 OTP per phone per hour)
+    - Store rate limit data in OtpStore table or Redis cache
+    - Return 429 Too Many Requests error when limit exceeded
+    - _Requirements: 7.6_
+  - [ ] 14.4 Add security headers and HTTPS configuration
+    - Configure Spring Security to add security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+    - Configure HSTS (HTTP Strict Transport Security)
+    - Ensure all API calls use HTTPS in production
+    - _Requirements: 7.4_
+  - [ ] 14.5 Implement audit logging
+    - Log all authentication attempts (success and failure) with phone number and timestamp
+    - Log all data access (grade reports, schedules) with user and resource
+    - Store logs in database or file system for security audit
+    - Mask sensitive data in logs (phone numbers: 670***000)
+    - _Requirements: 7.6_
+
+- [ ] 15. Create sample data and test fixtures
+  - [ ] 15.1 Create SQL scripts with realistic test data
+    - Insert sample students with Cameroonian names and phone numbers
+    - Insert sample classes (Terminale C, Seconde A, etc.)
+    - Insert sample inscriptions and grades (CC, SN, TP, RAT)
+    - Insert sample schedule PDFs for each class
+    - Ensure phone numbers are in various formats (with/without country code, multivalued)
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+  - [ ] 15.2 Create sample schedule PDF files
+    - Generate or obtain sample schedule PDFs for test classes
+    - Place PDFs in configured file storage directory
+    - Update database with correct file paths
+    - _Requirements: 4.6_
+
+- [ ] 16. Configure deployment and environment setup
+  - [ ] 16.1 Create production build configuration
+    - Configure Angular production build with optimization and AOT compilation
+    - Configure Spring Boot production profile with external configuration
+    - Set up environment variables for database, SMS, JWT secrets
+    - _Requirements: 6.1, 6.2, 6.6, 6.7_
+  - [ ] 16.2 Create deployment scripts and documentation
+    - Write script to build Angular app and copy to backend static resources
+    - Write script to package Spring Boot as executable JAR
+    - Document deployment steps for production environment
+    - Document environment variable configuration
+    - _Requirements: 6.7_
+  - [ ] 16.3 Configure Nginx reverse proxy (optional)
+    - Create Nginx configuration for SSL termination
+    - Configure reverse proxy to Spring Boot backend
+    - Serve Angular static files from Nginx
+    - _Requirements: 7.4_
+
+- [ ] 17. Perform end-to-end testing and bug fixes
+  - [ ]* 17.1 Write E2E tests with Cypress or Playwright
+    - Test complete authentication flow (send OTP → verify OTP → dashboard)
+    - Test viewing student list and downloading grade reports
+    - Test downloading class schedules
+    - Test session expiration and re-authentication
+    - Test error scenarios (invalid OTP, expired OTP, unauthorized access)
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 3.1, 3.4, 4.1, 4.3_
+  - [ ] 17.2 Perform manual testing and bug fixes
+    - Test application on different browsers (Chrome, Firefox, Safari)
+    - Test on mobile devices (responsive design)
+    - Test with various phone number formats
+    - Test with multiple children per parent
+    - Fix identified bugs and issues
+    - _Requirements: All_
+  - [ ] 17.3 Perform security testing
+    - Test SQL injection prevention
+    - Test XSS prevention
+    - Test CSRF protection
+    - Test authorization (parent can only access their children's data)
+    - Test JWT token expiration and validation
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.7_
+
+- [ ] 18. Prepare presentation and documentation
+  - [ ] 18.1 Create user documentation
+    - Write user guide for parents (how to login, view notes, download schedules)
+    - Create FAQ document for common issues
+    - _Requirements: All_
+  - [ ] 18.2 Create technical documentation
+    - Document API endpoints with request/response examples
+    - Document database schema and relationships
+    - Document deployment and configuration steps
+    - _Requirements: All_
+  - [ ] 18.3 Prepare presentation for March 12, 2026
+    - Create presentation slides with project overview, architecture, demo
+    - Prepare live demo environment with sample data
+    - Test demo scenarios to ensure smooth presentation
+    - _Requirements: 6.7_
