@@ -1,16 +1,20 @@
+# Configuration Twilio SMS
+twilio.account.sid=YOUR_TWILIO_ACCOUNT_SID
+twilio.auth.token=YOUR_TWILIO_AUTH_TOKEN
+twilio.phone.number=YOUR_TWILIO_PHONE_NUMBER
+
 # Configuration Base de donnees MySQL
-spring.datasource.url=jdbc:mysql://localhost:3306/suivi_academique?createDatabaseIfNotExist=true
+spring.datasource.url=jdbc:mysql://localhost:3306/suivi_academique_clean?createDatabaseIfNotExist=true
 spring.datasource.username=root
 spring.datasource.password=
 spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
 spring.jpa.database-platform=org.hibernate.dialect.MySQLDialect
-spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.format_sql=true
 
-# Activer Flyway pour les migrations automatiques
-spring.flyway.enabled=true
-spring.flyway.baseline-on-migrate=true
+# Desactiver Flyway temporairement
+spring.flyway.enabled=false
 
 # JWT
 jwt.secret=monSecretSuperSecurisePourLesTokensJWT2026
@@ -25,4 +29,4 @@ sms.api.secret=
 pdf.schedules.path=./schedules
 
 # Server
-server.port=8080
+server.port=8081
